@@ -1,20 +1,27 @@
 open Reprocessing;
 
-type boardPosition = {
+type boardPositionT = {
   x: int,
   y: int,
 };
 
-type direction =
+type directionT =
   | North
   | East
   | South
   | West;
 
 type snakeT = {
-  dir: direction,
-  parts: list(boardPosition),
+  dir: directionT,
+  parts: list(boardPositionT),
 };
+
+type msgT =
+  | ChangeDirection(directionT)
+  | UpdateGameState
+  | ResetGameState;
+
+type stateT = {snake: snakeT};
 
 let createNewSnakeHead = snake => {
   let oldHead = List.hd(snake.parts);
@@ -38,16 +45,9 @@ let updateSnake = (dropLast, snake) => {
   {...snake, parts: [newHead] @ rest};
 };
 
-type state = {snake: snakeT};
-
 let initSnake = () => {
   dir: North,
   parts: [{x: 9, y: 10}, {x: 10, y: 10}, {x: 11, y: 10}],
-};
-
-let setup = env => {
-  Env.size(~width=400, ~height=400, env);
-  initSnake();
 };
 
 let drawSnake = (snake, env) => {
@@ -59,63 +59,49 @@ let drawSnake = (snake, env) => {
   );
 };
 
-let handleSnakeDirectionChange = (snake, env) => {
-  let snake =
-    if (Env.keyPressed(Up, env)) {
-      {...snake, dir: North};
-    } else {
-      snake;
-    };
+let inputMap = [
+  (Reprocessing_Events.Up, ChangeDirection(North)),
+  (Reprocessing_Events.Down, ChangeDirection(South)),
+  (Reprocessing_Events.Left, ChangeDirection(East)),
+  (Reprocessing_Events.Right, ChangeDirection(West)),
+  (Reprocessing_Events.A, ResetGameState),
+  (Reprocessing_Events.S, UpdateGameState),
+];
 
-  let snake =
-    if (Env.keyPressed(Left, env)) {
-      {...snake, dir: East};
-    } else {
-      snake;
-    };
+let handleInput = env =>
+  List.filter(input => Env.keyPressed(fst(input), env), inputMap)
+  |> List.map(snd);
 
-  let snake =
-    if (Env.keyPressed(Right, env)) {
-      {...snake, dir: West};
-    } else {
-      snake;
-    };
+let updateGame = (state: stateT, messages: list(msgT)) =>
+  List.fold_left(
+    (state, message) =>
+      switch (message) {
+      | ChangeDirection(direction) => {
+          ...state,
+          snake: {
+            ...state.snake,
+            dir: direction,
+          },
+        }
+      | UpdateGameState => {...state, snake: updateSnake(true, state.snake)}
+      | ResetGameState => {...state, snake: initSnake()}
+      },
+    state,
+    messages,
+  );
 
-  let snake =
-    if (Env.keyPressed(Down, env)) {
-      {...snake, dir: South};
-    } else {
-      snake;
-    };
-
-  snake;
+let setup = env => {
+  Env.size(~width=400, ~height=400, env);
+  {snake: initSnake()};
 };
 
-let handleInput = (snake, env) => {
-  let snake = handleSnakeDirectionChange(snake, env);
+let draw = (state: stateT, env) => {
+  let messages = handleInput(env);
+  let state = updateGame(state, messages);
 
-  let snake =
-    if (Env.keyPressed(S, env)) {
-      updateSnake(true, snake);
-    } else {
-      snake;
-    };
-
-  let snake =
-    if (Env.keyPressed(A, env)) {
-      initSnake();
-    } else {
-      snake;
-    };
-
-  snake;
-};
-
-let draw = (snake, env) => {
-  let snake = handleInput(snake, env);
   Draw.background(Utils.color(~r=51, ~g=51, ~b=51, ~a=255), env);
-  drawSnake(snake, env);
-  snake;
+  drawSnake(state.snake, env);
+  state;
 };
 
 run(~setup, ~draw, ());
