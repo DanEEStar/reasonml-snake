@@ -19,9 +19,13 @@ type snakeT = {
 type msgT =
   | ChangeDirection(directionT)
   | UpdateGameState
-  | ResetGameState;
+  | ResetGameState
+  | TogglePause;
 
-type stateT = {snake: snakeT};
+type stateT = {
+  paused: bool,
+  snake: snakeT
+};
 
 let createNewSnakeHead = snake => {
   let oldHead = List.hd(snake.parts);
@@ -47,7 +51,7 @@ let updateSnake = (dropLast, snake) => {
 
 let initSnake = () => {
   dir: North,
-  parts: [{x: 9, y: 10}, {x: 10, y: 10}, {x: 11, y: 10}],
+  parts: [{x: 10, y: 9}, {x: 10, y: 10}, {x: 10, y: 11}],
 };
 
 let drawSnake = (snake, env) => {
@@ -66,6 +70,7 @@ let inputMap = [
   (Reprocessing_Events.Right, ChangeDirection(West)),
   (Reprocessing_Events.A, ResetGameState),
   (Reprocessing_Events.S, UpdateGameState),
+  (Reprocessing_Events.P, TogglePause),
 ];
 
 let handleInput = env =>
@@ -85,6 +90,7 @@ let updateGame = (state: stateT, messages: list(msgT)) =>
         }
       | UpdateGameState => {...state, snake: updateSnake(true, state.snake)}
       | ResetGameState => {...state, snake: initSnake()}
+      | TogglePause => {...state, paused: !state.paused}
       },
     state,
     messages,
@@ -92,15 +98,22 @@ let updateGame = (state: stateT, messages: list(msgT)) =>
 
 let setup = env => {
   Env.size(~width=400, ~height=400, env);
-  {snake: initSnake()};
+  {paused: true, snake: initSnake()};
 };
 
 let draw = (state: stateT, env) => {
   let messages = handleInput(env);
+
+  let messages = if(Env.frameCount(env) mod 7 == 0 && !state.paused) {
+    [UpdateGameState, ...messages]
+  } else {
+    messages
+  }
   let state = updateGame(state, messages);
 
   Draw.background(Utils.color(~r=51, ~g=51, ~b=51, ~a=255), env);
   drawSnake(state.snake, env);
+
   state;
 };
 
