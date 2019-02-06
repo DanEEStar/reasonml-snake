@@ -28,21 +28,15 @@ let createNewSnakeHead = snake => {
 
 let updateSnake = (dropLast, snake) => {
   let newHead = createNewSnakeHead(snake);
-  {...snake, parts: [newHead] @ snake.parts};
-};
+  let rest =
+    if (dropLast) {
+      snake.parts->List.rev->List.tl->List.rev;
+    } else {
+      snake.parts;
+    };
 
-/*
- updateSnakeSegments : Bool -> BoardPosition -> Snake -> Snake
- updateSnakeSegments drop newHead snake =
-     let
-         newParts =
-             if drop then
-                 newHead ::: dropLast snake.parts
-             else
-                 newHead ::: snake.parts
-     in
-     { snake | parts = newParts }
- */
+  {...snake, parts: [newHead] @ rest};
+};
 
 type state = {snake: snakeT};
 
@@ -65,8 +59,47 @@ let drawSnake = (snake, env) => {
   );
 };
 
-let draw = (snake, env) => {
-  /* let newSnake = {...snake, parts: updateSnakeSegments(false, snake)} */
+let handleSnakeDirectionChange = (snake, env) => {
+  let snake =
+    if (Env.keyPressed(Up, env)) {
+      {...snake, dir: North};
+    } else {
+      snake;
+    };
+
+  let snake =
+    if (Env.keyPressed(Left, env)) {
+      {...snake, dir: East};
+    } else {
+      snake;
+    };
+
+  let snake =
+    if (Env.keyPressed(Right, env)) {
+      {...snake, dir: West};
+    } else {
+      snake;
+    };
+
+  let snake =
+    if (Env.keyPressed(Down, env)) {
+      {...snake, dir: South};
+    } else {
+      snake;
+    };
+
+  snake;
+};
+
+let handleInput = (snake, env) => {
+  let snake = handleSnakeDirectionChange(snake, env);
+
+  let snake =
+    if (Env.keyPressed(S, env)) {
+      updateSnake(true, snake);
+    } else {
+      snake;
+    };
 
   let snake =
     if (Env.keyPressed(A, env)) {
@@ -75,34 +108,11 @@ let draw = (snake, env) => {
       snake;
     };
 
-  let snake =
-    if (Env.keyPressed(Up, env)) {
-      updateSnake(false, {...snake, dir: North});
-    } else {
-      snake;
-    };
+  snake;
+};
 
-  let snake =
-    if (Env.keyPressed(Left, env)) {
-      updateSnake(false, {...snake, dir: East});
-    } else {
-      snake;
-    };
-
-  let snake =
-    if (Env.keyPressed(Right, env)) {
-      updateSnake(false, {...snake, dir: West});
-    } else {
-      snake;
-    };
-
-  let snake =
-    if (Env.keyPressed(Down, env)) {
-      updateSnake(false, {...snake, dir: South});
-    } else {
-      snake;
-    };
-
+let draw = (snake, env) => {
+  let snake = handleInput(snake, env);
   Draw.background(Utils.color(~r=51, ~g=51, ~b=51, ~a=255), env);
   drawSnake(snake, env);
   snake;
