@@ -39,6 +39,14 @@ let createNewSnakeHead = snake => {
   };
 };
 
+let updateSnakeDirection = (state: stateT, newDirection: directionT) => {
+  ...state,
+  snake: {
+    ...state.snake,
+    dir: newDirection,
+  },
+};
+
 let updateSnake = (dropLast, snake) => {
   let newHead = createNewSnakeHead(snake);
   let rest =
@@ -88,9 +96,10 @@ let handleInput = env =>
 let updateGameState = state => {
   let newHead = createNewSnakeHead(state.snake);
   if (newHead == state.fruit) {
-    ({...state, snake: updateSnake(false, state.snake)}, [
-      AddNewFruit({x: Random.int(20), y: Random.int(20)})
-    ]);
+    (
+      {...state, snake: updateSnake(false, state.snake)},
+      [AddNewFruit({x: Random.int(20), y: Random.int(20)})],
+    );
   } else {
     ({...state, snake: updateSnake(true, state.snake)}, []);
   };
@@ -103,16 +112,10 @@ let updateGame = (state: stateT, messages: list(msgT)) => {
         ((state, _messages), message) =>
           switch (message) {
           | ChangeDirection(direction) => (
-              {
-                ...state,
-                snake: {
-                  ...state.snake,
-                  dir: direction,
-                },
-              },
+              updateSnakeDirection(state, direction),
               [],
             )
-          | AddNewFruit(pos) => ({...state, fruit: pos}, [])
+          | AddNewFruit(fruitPos) => ({...state, fruit: fruitPos}, [])
           | UpdateGameState => updateGameState(state)
           | ResetGameState => (resetGameState(), [])
           | TogglePause => ({...state, paused: !state.paused}, [])
