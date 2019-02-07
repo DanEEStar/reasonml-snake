@@ -86,32 +86,54 @@ let handleInput = env =>
 
 let updateGameState = state => {
   let newHead = createNewSnakeHead(state.snake);
-  if(newHead == state.fruit) {
-    print_endline("collision with fruit");
-    {...state, snake: updateSnake(false, state.snake), fruit: {x: Random.int(20), y: Random.int(20)}};
+  if (newHead == state.fruit) {
+    (
+      {
+        ...state,
+        snake: updateSnake(false, state.snake),
+        fruit: {
+          x: Random.int(20),
+          y: Random.int(20),
+        },
+      },
+      [],
+    );
   } else {
-    {...state, snake: updateSnake(true, state.snake)};
+    ({...state, snake: updateSnake(true, state.snake)}, []);
   };
 };
 
-let updateGame = (state: stateT, messages: list(msgT)) =>
-  List.fold_left(
-    (state, message) =>
-      switch (message) {
-      | ChangeDirection(direction) => {
-          ...state,
-          snake: {
-            ...state.snake,
-            dir: direction,
+let updateGame = (state: stateT, messages: list(msgT)) => {
+  let rec loop = (state: stateT, messages: list(msgT)) => {
+    let (newState, newMessages) =
+      List.fold_left(
+        ((state, _messages), message) =>
+          switch (message) {
+          | ChangeDirection(direction) => (
+              {
+                ...state,
+                snake: {
+                  ...state.snake,
+                  dir: direction,
+                },
+              },
+              [],
+            )
+          | UpdateGameState => updateGameState(state)
+          | ResetGameState => (resetGameState(), [])
+          | TogglePause => ({...state, paused: !state.paused}, [])
           },
-        }
-      | UpdateGameState => updateGameState(state)
-      | ResetGameState => resetGameState()
-      | TogglePause => {...state, paused: !state.paused}
-      },
-    state,
-    messages,
-  );
+        (state, []),
+        messages,
+      );
+    switch (newMessages) {
+    | [] => newState
+    | _ => loop(newState, newMessages)
+    };
+  };
+
+  loop(state, messages);
+};
 
 let setup = env => {
   Env.size(~width=400, ~height=400, env);
