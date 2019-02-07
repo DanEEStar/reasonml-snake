@@ -18,6 +18,7 @@ type snakeT = {
 
 type msgT =
   | ChangeDirection(directionT)
+  | AddNewFruit(boardPositionT)
   | UpdateGameState
   | ResetGameState
   | TogglePause;
@@ -87,17 +88,9 @@ let handleInput = env =>
 let updateGameState = state => {
   let newHead = createNewSnakeHead(state.snake);
   if (newHead == state.fruit) {
-    (
-      {
-        ...state,
-        snake: updateSnake(false, state.snake),
-        fruit: {
-          x: Random.int(20),
-          y: Random.int(20),
-        },
-      },
-      [],
-    );
+    ({...state, snake: updateSnake(false, state.snake)}, [
+      AddNewFruit({x: Random.int(20), y: Random.int(20)})
+    ]);
   } else {
     ({...state, snake: updateSnake(true, state.snake)}, []);
   };
@@ -119,6 +112,7 @@ let updateGame = (state: stateT, messages: list(msgT)) => {
               },
               [],
             )
+          | AddNewFruit(pos) => ({...state, fruit: pos}, [])
           | UpdateGameState => updateGameState(state)
           | ResetGameState => (resetGameState(), [])
           | TogglePause => ({...state, paused: !state.paused}, [])
