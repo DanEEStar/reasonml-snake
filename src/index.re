@@ -11,23 +11,12 @@ type segmentPositionT = {
   y: int,
 };
 
-let drawSegment =
-    (
-      ~color,
-      ~boardPosition,
-      ~sizeMultiplier=1.0,
-      env,
-    ) => {
+let drawSegment = (~color, ~pos, ~sizeMultiplier=1.0, env) => {
   let width = float_of_int(segmentSize) *. sizeMultiplier;
   let height = float_of_int(segmentSize) *. sizeMultiplier;
-  let x =
-    float_of_int(boardPosition.x * segmentSize + segmentSize / 2)
-    -. width
-    /. 2.0;
+  let x = float_of_int(pos.x * segmentSize + segmentSize / 2) -. width /. 2.0;
   let y =
-    float_of_int(boardPosition.y * segmentSize + segmentSize / 2)
-    -. height
-    /. 2.0;
+    float_of_int(pos.y * segmentSize + segmentSize / 2) -. height /. 2.0;
   Draw.fill(color, env);
   Draw.rectf(~pos=(x, y), ~width, ~height, env);
 };
@@ -59,11 +48,10 @@ module SegmentAnimation = {
   };
 
   let draw = (env, segmentAnimation: t) => {
-    let size =
-      1.0 +. segmentAnimation.elapsedTime /. 50.0;
+    let size = 1.0 +. segmentAnimation.elapsedTime /. 50.0;
     drawSegment(
       ~color=segmentAnimation.color,
-      ~boardPosition=segmentAnimation.pos,
+      ~pos=segmentAnimation.pos,
       ~sizeMultiplier=size,
       env,
     );
@@ -93,7 +81,10 @@ type msgT =
   | ResetGameState
   | TogglePause;
 
-type visualStateT = {segmentAnimations: list(SegmentAnimation.t)};
+type visualStateT = {
+  segmentAnimations: list(SegmentAnimation.t),
+  drawBigSnakeFruitSegment: segmentPositionT,
+};
 
 type stateT = {
   paused: bool,
@@ -144,6 +135,10 @@ let resetGameState = () => {
   },
   visualState: {
     segmentAnimations: [],
+    drawBigSnakeFruitSegment: {
+      x: (-1),
+      y: (-1),
+    },
   },
 };
 
@@ -169,21 +164,22 @@ let handleInput = env =>
   List.filter(input => Env.keyPressed(fst(input), env), inputMap)
   |> List.map(snd);
 
-let addSegmentAnimation = (state: stateT, pos: segmentPositionT) => {
+let visualHandleSnakeFruitAnimation = (state: stateT, pos: segmentPositionT) => {
   ...state,
   visualState: {
     segmentAnimations: [
-      SegmentAnimation.make(state.fruit, fruitColor, 60.0),
+      SegmentAnimation.make(pos, fruitColor, 60.0),
       ...state.visualState.segmentAnimations,
     ],
-  }
+    drawBigSnakeFruitSegment: pos,
+  },
 };
 
 let updateGameState = state => {
   let newHead = createNewSnakeHead(state.snake);
   if (newHead == state.fruit) {
     let state = {...state, snake: updateSnake(false, state.snake)};
-    let state = addSegmentAnimation(state, state.fruit);
+    let state = visualHandleSnakeFruitAnimation(state, state.fruit);
     (
       state,
       [
@@ -223,9 +219,18 @@ let updateGame = (state: stateT, messages: list(msgT)) => {
 };
 
 let updateVisualState = (state: stateT) => {
-    ...state.visualState,
-    segmentAnimations: SegmentAnimation.updateAll(state.visualState.segmentAnimations),
-}
+  segmentAnimations:
+    SegmentAnimation.updateAll(state.visualState.segmentAnimations),
+  drawBigSnakeFruitSegment:
+    if (List.mem(
+          state.visualState.drawBigSnakeFruitSegment,
+          state.snake.segments,
+        )) {
+      state.visualState.drawBigSnakeFruitSegment;
+    } else {
+      {x: (-1), y: (-1)};
+    },
+};
 
 let setup = env => {
   Env.size(~width=400, ~height=400, env);
@@ -234,12 +239,12 @@ let setup = env => {
 
 let drawSnake = (state, env) =>
   List.iteri(
-    (index, p) => drawSegment(~color=snakeColor, ~boardPosition=p, env),
+    (index, p) => drawSegment(~color=snakeColor, ~pos=p, env),
     state.snake.segments,
   );
 
 let drawFruit = (state, env) =>
-  drawSegment(~color=fruitColor, ~boardPosition=state.fruit, env);
+  drawSegment(~color=fruitColor, ~pos=state.fruit, env);
 
 let draw = (state: stateT, env) => {
   let messages = handleInput(env);
@@ -256,7 +261,20 @@ let draw = (state: stateT, env) => {
   Draw.background(Utils.color(~r=51, ~g=51, ~b=51, ~a=255), env);
   drawSnake(state, env);
   drawFruit(state, env);
-  List.iter(s => SegmentAnimation.draw(env, s), state.visualState.segmentAnimations);
+  List.iter(
+    s => SegmentAnimation.draw(env, s),
+    state.visualState.segmentAnimations,
+  );
+  if (List.mem(
+        state.visualState.drawBigSnakeFruitSegment,
+        state.snake.segments,
+      )) {
+    drawSegment(
+      ~color={...fruitColor, a: 0.7},
+      ~pos=state.visualState.drawBigSnakeFruitSegment,
+      env,
+    );
+  };
 
   state;
 };
