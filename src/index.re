@@ -84,6 +84,7 @@ type msgT =
 type visualStateT = {
   segmentAnimations: list(SegmentAnimation.t),
   drawBigSnakeFruitSegment: segmentPositionT,
+  mutable continousPart: float,
 };
 
 type stateT = {
@@ -139,6 +140,7 @@ let resetGameState = () => {
       x: (-1),
       y: (-1),
     },
+    continousPart: 0.0,
   },
 };
 
@@ -167,6 +169,7 @@ let handleInput = env =>
 let visualHandleSnakeFruitAnimation = (state: stateT, pos: segmentPositionT) => {
   ...state,
   visualState: {
+    ...state.visualState,
     segmentAnimations: [
       SegmentAnimation.make(pos, fruitColor, 60.0),
       ...state.visualState.segmentAnimations,
@@ -177,18 +180,24 @@ let visualHandleSnakeFruitAnimation = (state: stateT, pos: segmentPositionT) => 
 
 let updateGameState = state => {
   let newHead = createNewSnakeHead(state.snake);
-  if (newHead == state.fruit) {
-    let state = {...state, snake: updateSnake(false, state.snake)};
-    let state = visualHandleSnakeFruitAnimation(state, state.fruit);
-    (
-      state,
-      [
-        AddNewFruit({x: Random.int(boardSizeX), y: Random.int(boardSizeY)}),
-      ],
-    );
-  } else {
-    ({...state, snake: updateSnake(true, state.snake)}, []);
-  };
+  let result =
+    if (newHead == state.fruit) {
+      let state = {...state, snake: updateSnake(false, state.snake)};
+      let state = visualHandleSnakeFruitAnimation(state, state.fruit);
+      (
+        state,
+        [
+          AddNewFruit({
+            x: Random.int(boardSizeX),
+            y: Random.int(boardSizeY),
+          }),
+        ],
+      );
+    } else {
+      ({...state, snake: updateSnake(true, state.snake)}, []);
+    };
+  fst(result).visualState.continousPart = 0.0;
+  result;
 };
 
 let updateGame = (state: stateT, messages: list(msgT)) => {
@@ -230,6 +239,12 @@ let updateVisualState = (state: stateT) => {
     } else {
       {x: (-1), y: (-1)};
     },
+  continousPart:
+    if (state.paused) {
+      state.visualState.continousPart;
+    } else {
+      state.visualState.continousPart +. 0.1;
+    },
 };
 
 let setup = env => {
@@ -237,11 +252,34 @@ let setup = env => {
   resetGameState();
 };
 
-let drawSnake = (state, env) =>
+let drawSnake = (state, env) => {
+  let color = snakeColor;
   List.iteri(
-    (index, p) => drawSegment(~color=snakeColor, ~pos=p, env),
+    (index, pos) =>
+      if (index == 0) {
+        let width = float_of_int(segmentSize);
+        let height =
+          float_of_int(segmentSize) *. state.visualState.continousPart;
+        let x =
+          float_of_int(pos.x * segmentSize + segmentSize / 2) -. width /. 2.0;
+        let y = float_of_int(pos.y * segmentSize);
+        Draw.fill(color, env);
+        Draw.rectf(~pos=(x, y), ~width, ~height, env);
+      } else if (List.length(state.snake.segments) == index + 1) {
+        let width = float_of_int(segmentSize);
+        let height =
+          float_of_int(segmentSize);
+        let x =
+          float_of_int(pos.x * segmentSize + segmentSize / 2) -. width /. 2.0;
+        let y = float_of_int(pos.y * segmentSize) +. float_of_int(segmentSize) *. state.visualState.continousPart;
+        Draw.fill(color, env);
+        Draw.rectf(~pos=(x, y), ~width, ~height, env);
+      } else {
+        drawSegment(~color=snakeColor, ~pos, env);
+      },
     state.snake.segments,
   );
+};
 
 let drawFruit = (state, env) =>
   drawSegment(~color=fruitColor, ~pos=state.fruit, env);
@@ -250,7 +288,7 @@ let draw = (state: stateT, env) => {
   let messages = handleInput(env);
 
   let messages =
-    if (Env.frameCount(env) mod 7 == 0 && !state.paused) {
+    if (Env.frameCount(env) mod 10 == 0 && !state.paused) {
       [UpdateGameState, ...messages];
     } else {
       messages;
