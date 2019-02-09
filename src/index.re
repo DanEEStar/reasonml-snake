@@ -15,10 +15,11 @@ let drawSegment =
     (
       ~color,
       ~boardPosition,
-      ~width=float_of_int(segmentSize),
-      ~height=float_of_int(segmentSize),
+      ~sizeMultiplier=1.0,
       env,
     ) => {
+  let width = float_of_int(segmentSize) *. sizeMultiplier;
+  let height = float_of_int(segmentSize) *. sizeMultiplier;
   let x =
     float_of_int(boardPosition.x * segmentSize + segmentSize / 2)
     -. width
@@ -59,12 +60,11 @@ module SegmentAnimation = {
 
   let draw = (env, segmentAnimation: t) => {
     let size =
-      float_of_int(segmentSize) +. segmentAnimation.elapsedTime /. 2.0;
+      1.0 +. segmentAnimation.elapsedTime /. 50.0;
     drawSegment(
       ~color=segmentAnimation.color,
       ~boardPosition=segmentAnimation.pos,
-      ~height=size,
-      ~width=size,
+      ~sizeMultiplier=size,
       env,
     );
   };
@@ -222,9 +222,9 @@ let updateGame = (state: stateT, messages: list(msgT)) => {
   loop(state, messages);
 };
 
-let updateVisualState = (visualState: visualStateT) => {
-    ...visualState,
-    segmentAnimations: SegmentAnimation.updateAll(visualState.segmentAnimations),
+let updateVisualState = (state: stateT) => {
+    ...state.visualState,
+    segmentAnimations: SegmentAnimation.updateAll(state.visualState.segmentAnimations),
 }
 
 let setup = env => {
@@ -232,14 +232,14 @@ let setup = env => {
   resetGameState();
 };
 
-let drawSnake = (snake, env) =>
-  List.iter(
-    p => drawSegment(~color=snakeColor, ~boardPosition=p, env),
-    snake.segments,
+let drawSnake = (state, env) =>
+  List.iteri(
+    (index, p) => drawSegment(~color=snakeColor, ~boardPosition=p, env),
+    state.snake.segments,
   );
 
-let drawFruit = (fruit, env) =>
-  drawSegment(~color=fruitColor, ~boardPosition=fruit, env);
+let drawFruit = (state, env) =>
+  drawSegment(~color=fruitColor, ~boardPosition=state.fruit, env);
 
 let draw = (state: stateT, env) => {
   let messages = handleInput(env);
@@ -251,11 +251,11 @@ let draw = (state: stateT, env) => {
       messages;
     };
   let state = updateGame(state, messages);
-  let state = {...state, visualState: updateVisualState(state.visualState)};
+  let state = {...state, visualState: updateVisualState(state)};
 
   Draw.background(Utils.color(~r=51, ~g=51, ~b=51, ~a=255), env);
-  drawSnake(state.snake, env);
-  drawFruit(state.fruit, env);
+  drawSnake(state, env);
+  drawFruit(state, env);
   List.iter(s => SegmentAnimation.draw(env, s), state.visualState.segmentAnimations);
 
   state;
