@@ -115,12 +115,14 @@ type msgT =
   | AddNewFruit(segmentPositionT)
   | UpdateGameState
   | ResetGameState
-  | TogglePause;
+  | TogglePause
+  | ToggleContinuousDrawing;
 
 type visualStateT = {
   segmentAnimations: list(SegmentAnimation.t),
   drawBigSnakeFruitSegment: segmentPositionT,
   mutable drawPercentage: float,
+  mutable continuousDrawing: bool,
 };
 
 type stateT = {
@@ -182,6 +184,7 @@ let resetGameState = () => {
       y: (-1),
     },
     drawPercentage: 0.0,
+    continuousDrawing: true,
   },
 };
 
@@ -200,6 +203,7 @@ let inputMap = [
   (Reprocessing_Events.D, ChangeDirection(West)),
   (Reprocessing_Events.R, ResetGameState),
   (Reprocessing_Events.U, UpdateGameState),
+  (Reprocessing_Events.C, ToggleContinuousDrawing),
   (Reprocessing_Events.Space, TogglePause),
 ];
 
@@ -255,6 +259,10 @@ let updateGame = (state: stateT, messages: list(msgT)) => {
           | UpdateGameState => updateGameState(state)
           | ResetGameState => (resetGameState(), [])
           | TogglePause => ({...state, paused: !state.paused}, [])
+          | ToggleContinuousDrawing =>
+            state.visualState.continuousDrawing =
+              !state.visualState.continuousDrawing;
+            (state, []);
           },
         (state, []),
         messages,
@@ -269,6 +277,7 @@ let updateGame = (state: stateT, messages: list(msgT)) => {
 };
 
 let updateVisualState = (state: stateT) => {
+  ...state.visualState,
   segmentAnimations:
     SegmentAnimation.updateAll(state.visualState.segmentAnimations),
   drawBigSnakeFruitSegment:
@@ -304,57 +313,64 @@ let directionFromNeighbour = (pos1, pos2) =>
     North;
   };
 
-let drawSnake = (state, env) => {
-  let revSegments = List.rev(state.snake.segments);
-  let previousSegment = ref(List.hd(revSegments));
+let drawSnake = (state, env) =>
+  if (state.visualState.continuousDrawing) {
+    let revSegments = List.rev(state.snake.segments);
+    let previousSegment = ref(List.hd(revSegments));
 
-  List.iteri(
-    (index, pos) => {
-      if (index == 0) {
-        drawSegmentPercentage(
-          ~color=snakeColor,
-          ~pos,
-          ~percentage=1.0 -. state.visualState.drawPercentage,
-          ~dir=directionFromNeighbour(pos, revSegments |> List.tl |> List.hd),
-          env,
-        );
-      } else if (List.length(state.snake.segments) == index + 1) {
-        let (xOffset, yOffset) =
-          switch (directionFromNeighbour(pos, previousSegment^)) {
-          | North => (
-              0.0,
-              float_of_int(segmentSize)
-              *. state.visualState.drawPercentage
-              -. float_of_int(segmentSize),
-            )
-          | South => (
-              0.0,
-              float_of_int(- segmentSize)
-              *. state.visualState.drawPercentage
-              +. float_of_int(segmentSize),
-            )
-          | East => (
-              float_of_int(segmentSize)
-              *. state.visualState.drawPercentage
-              -. float_of_int(segmentSize),
-              0.0,
-            )
-          | West => (
-              float_of_int(- segmentSize)
-              *. state.visualState.drawPercentage
-              +. float_of_int(segmentSize),
-              0.0,
-            )
-          };
-        drawSegment(~color=snakeHeadColor, ~pos, ~xOffset, ~yOffset, env);
-      } else {
-        drawSegment(~color=snakeColor, ~pos, env);
-      };
-      previousSegment := pos;
-    },
-    revSegments,
-  );
-};
+    List.iteri(
+      (index, pos) => {
+        if (index == 0) {
+          drawSegmentPercentage(
+            ~color=snakeColor,
+            ~pos,
+            ~percentage=1.0 -. state.visualState.drawPercentage,
+            ~dir=
+              directionFromNeighbour(pos, revSegments |> List.tl |> List.hd),
+            env,
+          );
+        } else if (List.length(state.snake.segments) == index + 1) {
+          let (xOffset, yOffset) =
+            switch (directionFromNeighbour(pos, previousSegment^)) {
+            | North => (
+                0.0,
+                float_of_int(segmentSize)
+                *. state.visualState.drawPercentage
+                -. float_of_int(segmentSize),
+              )
+            | South => (
+                0.0,
+                float_of_int(- segmentSize)
+                *. state.visualState.drawPercentage
+                +. float_of_int(segmentSize),
+              )
+            | East => (
+                float_of_int(segmentSize)
+                *. state.visualState.drawPercentage
+                -. float_of_int(segmentSize),
+                0.0,
+              )
+            | West => (
+                float_of_int(- segmentSize)
+                *. state.visualState.drawPercentage
+                +. float_of_int(segmentSize),
+                0.0,
+              )
+            };
+          drawSegment(~color=snakeHeadColor, ~pos, ~xOffset, ~yOffset, env);
+        } else {
+          drawSegment(~color=snakeColor, ~pos, env);
+        };
+        previousSegment := pos;
+      },
+      revSegments,
+    );
+  } else {
+    List.iter(
+      pos => drawSegment(~color=snakeColor, ~pos, env),
+      state.snake.segments,
+    );
+  };
 
 let drawFruit = (state, env) =>
   drawSegment(~color=fruitColor, ~pos=state.fruit, env);
