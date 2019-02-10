@@ -4,6 +4,7 @@ let segmentSize = 20;
 let boardSizeX = 20;
 let boardSizeY = 20;
 let snakeColor = Utils.color(~r=41, ~g=166, ~b=244, ~a=255);
+let snakeHeadColor = Utils.color(~r=66, ~g=122, ~b=244, ~a=255);
 let fruitColor = Utils.color(~r=255, ~g=80, ~b=41, ~a=255);
 
 type segmentPositionT = {
@@ -119,7 +120,7 @@ type msgT =
 type visualStateT = {
   segmentAnimations: list(SegmentAnimation.t),
   drawBigSnakeFruitSegment: segmentPositionT,
-  mutable continousPart: float,
+  mutable drawPercentage: float,
 };
 
 type stateT = {
@@ -180,7 +181,7 @@ let resetGameState = () => {
       x: (-1),
       y: (-1),
     },
-    continousPart: 0.0,
+    drawPercentage: 0.0,
   },
 };
 
@@ -236,7 +237,7 @@ let updateGameState = state => {
     } else {
       ({...state, snake: updateSnake(true, state.snake)}, []);
     };
-  fst(result).visualState.continousPart = 0.0;
+  fst(result).visualState.drawPercentage = 0.0;
   result;
 };
 
@@ -279,11 +280,11 @@ let updateVisualState = (state: stateT) => {
     } else {
       {x: (-1), y: (-1)};
     },
-  continousPart:
+  drawPercentage:
     if (state.paused) {
-      state.visualState.continousPart;
+      state.visualState.drawPercentage;
     } else {
-      state.visualState.continousPart +. 0.1;
+      state.visualState.drawPercentage +. 0.1;
     },
 };
 
@@ -292,21 +293,20 @@ let setup = env => {
   resetGameState();
 };
 
-let directionFromNeighbour = (pos1, pos2) => {
-  if(pos1.x > pos2.x) {
+let directionFromNeighbour = (pos1, pos2) =>
+  if (pos1.x > pos2.x) {
     West;
-  } else if(pos1.x < pos2.x) {
+  } else if (pos1.x < pos2.x) {
     East;
-  } else if(pos1.y > pos2.y) {
+  } else if (pos1.y > pos2.y) {
     South;
   } else {
     North;
-  }
-}
+  };
 
 let drawSnake = (state, env) => {
-  let [snakeHead, part2, ..._] = state.snake.segments;
-  let previousPart = ref(snakeHead);
+  let revSegments = List.rev(state.snake.segments);
+  let previousSegment = ref(List.hd(revSegments));
 
   List.iteri(
     (index, pos) => {
@@ -314,24 +314,45 @@ let drawSnake = (state, env) => {
         drawSegmentPercentage(
           ~color=snakeColor,
           ~pos,
-          ~percentage=state.visualState.continousPart,
-          ~dir=directionFromNeighbour(pos, part2),
+          ~percentage=1.0 -. state.visualState.drawPercentage,
+          ~dir=directionFromNeighbour(pos, revSegments |> List.tl |> List.hd),
           env,
         );
       } else if (List.length(state.snake.segments) == index + 1) {
-        drawSegmentPercentage(
-          ~color=snakeColor,
-          ~pos,
-          ~percentage=1.0 -. state.visualState.continousPart,
-          ~dir=directionFromNeighbour(pos, previousPart^),
-          env,
-        );
+        let (xOffset, yOffset) =
+          switch (directionFromNeighbour(pos, previousSegment^)) {
+          | North => (
+              0.0,
+              float_of_int(segmentSize)
+              *. state.visualState.drawPercentage
+              -. float_of_int(segmentSize),
+            )
+          | South => (
+              0.0,
+              float_of_int(- segmentSize)
+              *. state.visualState.drawPercentage
+              +. float_of_int(segmentSize),
+            )
+          | East => (
+              float_of_int(segmentSize)
+              *. state.visualState.drawPercentage
+              -. float_of_int(segmentSize),
+              0.0,
+            )
+          | West => (
+              float_of_int(- segmentSize)
+              *. state.visualState.drawPercentage
+              +. float_of_int(segmentSize),
+              0.0,
+            )
+          };
+        drawSegment(~color=snakeHeadColor, ~pos, ~xOffset, ~yOffset, env);
       } else {
         drawSegment(~color=snakeColor, ~pos, env);
       };
-      previousPart := pos;
+      previousSegment := pos;
     },
-    state.snake.segments,
+    revSegments,
   );
 };
 
