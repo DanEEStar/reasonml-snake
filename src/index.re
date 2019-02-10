@@ -11,15 +11,56 @@ type segmentPositionT = {
   y: int,
 };
 
-let drawSegment = (~color, ~pos, ~sizeMultiplier=1.0, env) => {
-  let width = float_of_int(segmentSize) *. sizeMultiplier;
-  let height = float_of_int(segmentSize) *. sizeMultiplier;
-  let x = float_of_int(pos.x * segmentSize + segmentSize / 2) -. width /. 2.0;
+type directionT =
+  | North
+  | East
+  | South
+  | West;
+
+let drawSegment =
+    (
+      ~color,
+      ~pos,
+      ~sizeMultiplier=1.0,
+      ~width=float_of_int(segmentSize) *. sizeMultiplier,
+      ~height=float_of_int(segmentSize) *. sizeMultiplier,
+      ~xOffset=0.0,
+      ~yOffset=0.0,
+      env,
+    ) => {
+  let x =
+    float_of_int(pos.x * segmentSize + segmentSize / 2)
+    -. width
+    /. 2.0
+    -. xOffset;
   let y =
-    float_of_int(pos.y * segmentSize + segmentSize / 2) -. height /. 2.0;
+    float_of_int(pos.y * segmentSize + segmentSize / 2)
+    -. height
+    /. 2.0
+    -. yOffset;
   Draw.fill(color, env);
   Draw.rectf(~pos=(x, y), ~width, ~height, env);
 };
+
+let drawSegmentPercentage = (~color, ~pos, ~percentage, ~dir, env) =>
+  switch (dir) {
+  | North =>
+    let height = float_of_int(segmentSize) *. percentage;
+    let yOffset = float_of_int(- segmentSize) *. (1.0 -. percentage) /. 2.0;
+    drawSegment(~color, ~pos, ~height, ~yOffset, env);
+  | South =>
+    let height = float_of_int(segmentSize) *. percentage;
+    let yOffset = float_of_int(segmentSize) *. (1.0 -. percentage) /. 2.0;
+    drawSegment(~color, ~pos, ~height, ~yOffset, env);
+  | East =>
+    let width = float_of_int(segmentSize) *. percentage;
+    let xOffset = float_of_int(- segmentSize) *. (1.0 -. percentage) /. 2.0;
+    drawSegment(~color, ~pos, ~width, ~xOffset, env);
+  | West =>
+    let width = float_of_int(segmentSize) *. percentage;
+    let xOffset = float_of_int(segmentSize) *. (1.0 -. percentage) /. 2.0;
+    drawSegment(~color, ~pos, ~width, ~xOffset, env);
+  };
 
 module SegmentAnimation = {
   type segmentAnimationT = {
@@ -62,12 +103,6 @@ module SegmentAnimation = {
     |> List.map(update)
     |> List.filter(sa => sa.elapsedTime < sa.runningTime);
 };
-
-type directionT =
-  | North
-  | East
-  | South
-  | West;
 
 type snakeT = {
   dir: directionT,
@@ -132,7 +167,12 @@ let resetGameState = () => {
   },
   snake: {
     dir: North,
-    segments: [{x: 10, y: 9}, {x: 10, y: 10}, {x: 10, y: 11}],
+    segments: [
+      {x: 10, y: 9},
+      {x: 10, y: 10},
+      {x: 10, y: 11},
+      {x: 10, y: 12},
+    ],
   },
   visualState: {
     segmentAnimations: [],
@@ -252,31 +292,45 @@ let setup = env => {
   resetGameState();
 };
 
+let directionFromNeighbour = (pos1, pos2) => {
+  if(pos1.x > pos2.x) {
+    West;
+  } else if(pos1.x < pos2.x) {
+    East;
+  } else if(pos1.y > pos2.y) {
+    South;
+  } else {
+    North;
+  }
+}
+
 let drawSnake = (state, env) => {
-  let color = snakeColor;
+  let [snakeHead, part2, ..._] = state.snake.segments;
+  let previousPart = ref(snakeHead);
+
   List.iteri(
-    (index, pos) =>
+    (index, pos) => {
       if (index == 0) {
-        let width = float_of_int(segmentSize);
-        let height =
-          float_of_int(segmentSize) *. state.visualState.continousPart;
-        let x =
-          float_of_int(pos.x * segmentSize + segmentSize / 2) -. width /. 2.0;
-        let y = float_of_int(pos.y * segmentSize);
-        Draw.fill(color, env);
-        Draw.rectf(~pos=(x, y), ~width, ~height, env);
+        drawSegmentPercentage(
+          ~color=snakeColor,
+          ~pos,
+          ~percentage=state.visualState.continousPart,
+          ~dir=directionFromNeighbour(pos, part2),
+          env,
+        );
       } else if (List.length(state.snake.segments) == index + 1) {
-        let width = float_of_int(segmentSize);
-        let height =
-          float_of_int(segmentSize);
-        let x =
-          float_of_int(pos.x * segmentSize + segmentSize / 2) -. width /. 2.0;
-        let y = float_of_int(pos.y * segmentSize) +. float_of_int(segmentSize) *. state.visualState.continousPart;
-        Draw.fill(color, env);
-        Draw.rectf(~pos=(x, y), ~width, ~height, env);
+        drawSegmentPercentage(
+          ~color=snakeColor,
+          ~pos,
+          ~percentage=1.0 -. state.visualState.continousPart,
+          ~dir=directionFromNeighbour(pos, previousPart^),
+          env,
+        );
       } else {
         drawSegment(~color=snakeColor, ~pos, env);
-      },
+      };
+      previousPart := pos;
+    },
     state.snake.segments,
   );
 };
