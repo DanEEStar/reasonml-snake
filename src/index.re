@@ -18,6 +18,17 @@ type directionT =
   | South
   | West;
 
+let directionFromNeighbour = (pos1, pos2) =>
+  if (pos1.x > pos2.x) {
+    West;
+  } else if (pos1.x < pos2.x) {
+    East;
+  } else if (pos1.y > pos2.y) {
+    South;
+  } else {
+    North;
+  };
+
 let drawSegment =
     (
       ~color,
@@ -105,12 +116,28 @@ module SegmentAnimation = {
     |> List.filter(sa => sa.elapsedTime < sa.runningTime);
 };
 
-type snakeT = {
-  dir: directionT,
-  segments: list(segmentPositionT),
-};
+module SnakeGame = {
+  type snakeT = {
+    dir: directionT,
+    segments: list(segmentPositionT),
+  };
+  type visualStateT = {
+    segmentAnimations: list(SegmentAnimation.t),
+    drawBigSnakeFruitSegment: segmentPositionT,
+    mutable drawPercentage: float,
+    mutable continuousDrawing: bool,
+  };
 
-type msgT =
+  type stateT = {
+    paused: bool,
+    fruit: segmentPositionT,
+    snake: snakeT,
+    visualState: visualStateT,
+  };
+
+  type t = stateT;
+
+  type msgT =
   | ChangeDirection(directionT)
   | AddNewFruit(segmentPositionT)
   | UpdateGameState
@@ -118,21 +145,7 @@ type msgT =
   | TogglePause
   | ToggleContinuousDrawing;
 
-type visualStateT = {
-  segmentAnimations: list(SegmentAnimation.t),
-  drawBigSnakeFruitSegment: segmentPositionT,
-  mutable drawPercentage: float,
-  mutable continuousDrawing: bool,
-};
-
-type stateT = {
-  paused: bool,
-  fruit: segmentPositionT,
-  snake: snakeT,
-  visualState: visualStateT,
-};
-
-let createNewSnakeHead = snake => {
+  let createNewSnakeHead = snake => {
   let {x, y} = List.hd(snake.segments);
   switch (snake.dir) {
   | North => {x, y: y - 1}
@@ -187,6 +200,7 @@ let resetGameState = () => {
     continuousDrawing: true,
   },
 };
+
 
 let inputMap = [
   (Reprocessing_Events.Up, ChangeDirection(North)),
@@ -297,22 +311,6 @@ let updateVisualState = (state: stateT) => {
     },
 };
 
-let setup = env => {
-  Env.size(~width=400, ~height=400, env);
-  resetGameState();
-};
-
-let directionFromNeighbour = (pos1, pos2) =>
-  if (pos1.x > pos2.x) {
-    West;
-  } else if (pos1.x < pos2.x) {
-    East;
-  } else if (pos1.y > pos2.y) {
-    South;
-  } else {
-    North;
-  };
-
 let drawSnake = (state, env) =>
   if (state.visualState.continuousDrawing) {
     let revSegments = List.rev(state.snake.segments);
@@ -407,5 +405,39 @@ let draw = (state: stateT, env) => {
 
   state;
 };
+};
+
+type menuStateT =
+  | StartMenu
+  | GameInProgress
+  | GameOver;
+
+
+type stateT = {
+  playState: SnakeGame.t
+}
+
+
+let inputMap = [];
+
+let handleInput = env =>
+  List.filter(input => Env.keyPressed(fst(input), env), inputMap)
+  |> List.map(snd);
+
+
+
+
+
+
+let setup = env => {
+  Env.size(~width=400, ~height=400, env);
+  {playState: SnakeGame.resetGameState()};
+};
+
+let draw = (state: stateT, env) =>  {
+  {playState: SnakeGame.draw(state.playState, env)}
+}
+
+
 
 run(~setup, ~draw, ());
