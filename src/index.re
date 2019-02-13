@@ -112,6 +112,7 @@ module SnakeGame = {
     dir: directionT,
     segments: list(segmentPositionT),
   };
+
   type visualStateT = {
     segmentAnimations: list(SegmentAnimation.t),
     drawBigSnakeFruitSegment: segmentPositionT,
@@ -119,10 +120,16 @@ module SnakeGame = {
     mutable continuousDrawing: bool,
   };
 
+  type gameStateT =
+    | Playing
+    | GameOverWaiting
+    | GameOver;
+
   type stateT = {
     paused: bool,
     fruit: segmentPositionT,
     snake: snakeT,
+    gameState: gameStateT,
     visualState: visualStateT,
   };
 
@@ -134,7 +141,8 @@ module SnakeGame = {
     | TickGameState
     | ResetGameState
     | TogglePause
-    | ToggleContinuousDrawing;
+    | ToggleContinuousDrawing
+    | SetGameOver;
 
   let createNewSnakeHead = snake => {
     let {x, y} = List.hd(snake.segments);
@@ -185,6 +193,7 @@ module SnakeGame = {
       drawPercentage: 0.0,
       continuousDrawing: true,
     },
+    gameState: Playing,
   };
 
   let inputMap = [
@@ -204,6 +213,7 @@ module SnakeGame = {
     (Reprocessing_Events.U, TickGameState),
     (Reprocessing_Events.C, ToggleContinuousDrawing),
     (Reprocessing_Events.Space, TogglePause),
+    (Reprocessing_Events.M, SetGameOver),
   ];
 
   let handleInput = env => List.filter(input => Env.keyPressed(fst(input), env), inputMap) |> List.map(snd);
@@ -217,25 +227,31 @@ module SnakeGame = {
     },
   };
 
-  let tickGameState = state => {
-    let newHead = createNewSnakeHead(state.snake);
-    let result =
-      if (newHead == state.fruit) {
-        let state = {...state, snake: updateSnake(false, state.snake)};
-        let state = visualHandleSnakeFruitAnimation(state, state.fruit);
-        (state, [AddNewFruit({x: Random.int(boardSizeX), y: Random.int(boardSizeY)})]);
-      } else {
-        ({...state, snake: updateSnake(true, state.snake)}, []);
-      };
-    fst(result).visualState.drawPercentage = 0.0;
-    result;
-  };
+  let tickGameState = state =>
+    if (state.gameState == Playing) {
+      let newHead = createNewSnakeHead(state.snake);
+      let result =
+        if (newHead == state.fruit) {
+          let state = {...state, snake: updateSnake(false, state.snake)};
+          let state = visualHandleSnakeFruitAnimation(state, state.fruit);
+          (state, [AddNewFruit({x: Random.int(boardSizeX), y: Random.int(boardSizeY)})]);
+        } else if (List.mem(newHead, state.snake.segments)) {
+          (state, [SetGameOver]);
+        } else {
+          ({...state, snake: updateSnake(true, state.snake)}, []);
+        };
+      fst(result).visualState.drawPercentage = 0.0;
+      result;
+    } else {
+      (state, []);
+    };
 
   let playStateMessageHandler = ((state, _), message) =>
     switch (message) {
     | ChangeDirection(direction) => (updateSnakeDirection(state, direction), [])
     | AddNewFruit(fruitPos) => ({...state, fruit: fruitPos}, [])
     | TickGameState => tickGameState(state)
+    | SetGameOver => ({...state, gameState: GameOver}, [])
     | ResetGameState => (resetGameState(), [])
     | TogglePause => ({...state, paused: !state.paused}, [])
     | ToggleContinuousDrawing =>
@@ -318,7 +334,12 @@ module SnakeGame = {
         inputMessages;
       };
     let state = messageReduce(state, messages, playStateMessageHandler);
-    {...state, visualState: updateVisualState(state)};
+
+    if (state.gameState == Playing) {
+      {...state, visualState: updateVisualState(state)};
+    } else {
+      state;
+    };
   };
 
   let draw = (state, env) => {
@@ -329,7 +350,7 @@ module SnakeGame = {
     if (List.mem(state.visualState.drawBigSnakeFruitSegment, state.snake.segments)) {
       drawSegment(~color={...fruitColor, a: 0.7}, ~pos=state.visualState.drawBigSnakeFruitSegment, env);
     };
-  }
+  };
 
   let drawAndUpdate = (state: stateT, env) => {
     let messages = handleInput(env);
@@ -349,11 +370,8 @@ type stateT = {
   playState: SnakeGame.t,
 };
 
-type msgT = 
+type msgT =
   | StartGame;
-
-
-
 
 let setup = env => {
   Env.size(~width=400, ~height=400, env);
@@ -361,26 +379,35 @@ let setup = env => {
 };
 
 let drawAndUpdateMenu = (state, env) => {
-  let inputMap = [
-    (Reprocessing_Events.C, StartGame),
-  ];
+  let inputMap = [(Reprocessing_Events.C, StartGame)];
 
-  let handleInput = env => List.filter(input => Env.keyPressed(fst(input), env), inputMap) |> List.map(snd)
+  let handleInput = env => List.filter(input => Env.keyPressed(fst(input), env), inputMap) |> List.map(snd);
 
   let messageHandler = ((state, _), message) =>
-  switch (message) {
-    | StartGame => ({...state, menuState: GameInProgress}, []);
-  };
-  let inputMessages = handleInput(env);
-  messageReduce(state, inputMessages, messageHandler);
-}
+    switch (message) {
+    | StartGame => ({...state, menuState: GameInProgress, playState: SnakeGame.resetGameState()}, [])
+    };
 
-let draw = (state: stateT, env) => {
-  switch(state.menuState) {
-    | StartMenu => drawAndUpdateMenu(state, env)
-    | GameInProgress => {...state, playState: SnakeGame.drawAndUpdate(state.playState, env)}
-    | GameOver => state
-  }
+  let state = messageReduce(state, handleInput(env), messageHandler);
+
+  SnakeGame.draw(state.playState, env);
+
+  Draw.fill(Utils.color(~r=0, ~g=0, ~b=0, ~a=100), env);
+  Draw.rect(~pos=(0, 0), ~width=400, ~height=400, env);
+
+  state;
 };
+
+let draw = (state: stateT, env) =>
+  switch (state.menuState) {
+  | StartMenu => drawAndUpdateMenu(state, env)
+  | GameInProgress =>
+    if (state.playState.gameState == SnakeGame.GameOver) {
+      {...state, menuState: StartMenu};
+    } else {
+      {...state, playState: SnakeGame.drawAndUpdate(state.playState, env)};
+    }
+  | GameOver => drawAndUpdateMenu(state, env)
+  };
 
 run(~setup, ~draw, ());
