@@ -349,15 +349,38 @@ type stateT = {
   playState: SnakeGame.t,
 };
 
-let inputMap = [];
+type msgT = 
+  | StartGame;
 
-let handleInput = env => List.filter(input => Env.keyPressed(fst(input), env), inputMap) |> List.map(snd);
+
+
 
 let setup = env => {
   Env.size(~width=400, ~height=400, env);
-  {menuState: GameInProgress, playState: SnakeGame.resetGameState()};
+  {menuState: StartMenu, playState: SnakeGame.resetGameState()};
 };
 
-let draw = (state: stateT, env) => {...state, playState: SnakeGame.drawAndUpdate(state.playState, env)};
+let drawAndUpdateMenu = (state, env) => {
+  let inputMap = [
+    (Reprocessing_Events.C, StartGame),
+  ];
+
+  let handleInput = env => List.filter(input => Env.keyPressed(fst(input), env), inputMap) |> List.map(snd)
+
+  let messageHandler = ((state, _), message) =>
+  switch (message) {
+    | StartGame => ({...state, menuState: GameInProgress}, []);
+  };
+  let inputMessages = handleInput(env);
+  messageReduce(state, inputMessages, messageHandler);
+}
+
+let draw = (state: stateT, env) => {
+  switch(state.menuState) {
+    | StartMenu => drawAndUpdateMenu(state, env)
+    | GameInProgress => {...state, playState: SnakeGame.drawAndUpdate(state.playState, env)}
+    | GameOver => state
+  }
+};
 
 run(~setup, ~draw, ());
