@@ -372,28 +372,29 @@ module SnakeGame = {
       );
     };
 
-  let drawFruit = (state, env) =>
-    drawSegment(~color=fruitColor, ~pos=state.fruit, env);
+  let drawFruit = (state, sizeMultiplier, env) =>
+    drawSegment(~color=fruitColor, ~pos=state.fruit, ~sizeMultiplier, env);
 
-  let update = (state: stateT, env) => {
-    let messages = handleInput(env);
+  let update = (state: stateT, inputMessages, frameCount) => {
 
     let messages =
-      if (Env.frameCount(env) mod 10 == 0 && !state.paused) {
-        [TickGameState, ...messages];
+      if (frameCount mod 10 == 0 && !state.paused) {
+        [TickGameState, ...inputMessages];
       } else {
-        messages;
+        inputMessages;
       };
     let state = updatePlayState(state, messages);
     {...state, visualState: updateVisualState(state)};
   }
 
   let draw = (state: stateT, env) => {
-    let state = update(state, env);
+    let messages = handleInput(env);
+
+    let state = update(state, messages, Env.frameCount(env));
 
     Draw.background(Utils.color(~r=51, ~g=51, ~b=51, ~a=255), env);
     drawSnake(state, env);
-    drawFruit(state, env);
+    drawFruit(state, 1.0 +. (sin(float_of_int(Env.frameCount(env)) /. 20.0) /. 5.0), env);
     List.iter(
       s => SegmentAnimation.draw(env, s),
       state.visualState.segmentAnimations,
@@ -418,7 +419,10 @@ type menuStateT =
   | GameInProgress
   | GameOver;
 
-type stateT = {playState: SnakeGame.t};
+type stateT = {
+  menuState: menuStateT,
+  playState: SnakeGame.t
+};
 
 let inputMap = [];
 
@@ -428,10 +432,11 @@ let handleInput = env =>
 
 let setup = env => {
   Env.size(~width=400, ~height=400, env);
-  {playState: SnakeGame.resetGameState()};
+  {menuState: GameInProgress, playState: SnakeGame.resetGameState()};
 };
 
 let draw = (state: stateT, env) => {
+  ...state,
   playState: SnakeGame.draw(state.playState, env),
 };
 
