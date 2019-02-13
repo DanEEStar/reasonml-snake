@@ -7,6 +7,17 @@ let snakeColor = Utils.color(~r=41, ~g=166, ~b=244, ~a=255);
 let snakeHeadColor = Utils.color(~r=66, ~g=122, ~b=244, ~a=255);
 let fruitColor = Utils.color(~r=255, ~g=80, ~b=41, ~a=255);
 
+let messageReduce = (state: 'a, messages: list('b), messageHandler) => {
+  let rec loop = (state: 'a, messages: list('b)) => {
+    let (newState, newMessages) = List.fold_left(messageHandler, (state, []), messages);
+    switch (newMessages) {
+    | [] => newState
+    | _ => loop(newState, newMessages)
+    };
+  };
+  loop(state, messages);
+};
+
 type segmentPositionT = {
   x: int,
   y: int,
@@ -220,32 +231,17 @@ module SnakeGame = {
     result;
   };
 
-  let updatePlayState = (state: stateT, messages: list(msgT)) => {
-    let rec loop = (state: stateT, messages: list(msgT)) => {
-      let (newState, newMessages) =
-        List.fold_left(
-          ((state, _messages), message) =>
-            switch (message) {
-            | ChangeDirection(direction) => (updateSnakeDirection(state, direction), [])
-            | AddNewFruit(fruitPos) => ({...state, fruit: fruitPos}, [])
-            | TickGameState => tickGameState(state)
-            | ResetGameState => (resetGameState(), [])
-            | TogglePause => ({...state, paused: !state.paused}, [])
-            | ToggleContinuousDrawing =>
-              state.visualState.continuousDrawing = !state.visualState.continuousDrawing;
-              (state, []);
-            },
-          (state, []),
-          messages,
-        );
-      switch (newMessages) {
-      | [] => newState
-      | _ => loop(newState, newMessages)
-      };
+  let playStateMessageHandler = ((state, _), message) =>
+    switch (message) {
+    | ChangeDirection(direction) => (updateSnakeDirection(state, direction), [])
+    | AddNewFruit(fruitPos) => ({...state, fruit: fruitPos}, [])
+    | TickGameState => tickGameState(state)
+    | ResetGameState => (resetGameState(), [])
+    | TogglePause => ({...state, paused: !state.paused}, [])
+    | ToggleContinuousDrawing =>
+      state.visualState.continuousDrawing = !state.visualState.continuousDrawing;
+      (state, []);
     };
-
-    loop(state, messages);
-  };
 
   let updateVisualState = (state: stateT) => {
     ...state.visualState,
@@ -321,15 +317,11 @@ module SnakeGame = {
       } else {
         inputMessages;
       };
-    let state = updatePlayState(state, messages);
+    let state = messageReduce(state, messages, playStateMessageHandler);
     {...state, visualState: updateVisualState(state)};
   };
 
-  let draw = (state: stateT, env) => {
-    let messages = handleInput(env);
-
-    let state = update(state, messages, Env.frameCount(env));
-
+  let draw = (state, env) => {
     Draw.background(Utils.color(~r=51, ~g=51, ~b=51, ~a=255), env);
     drawSnake(state, env);
     drawFruit(state, 1.0 +. sin(float_of_int(Env.frameCount(env)) /. 20.0) /. 5.0, env);
@@ -337,7 +329,12 @@ module SnakeGame = {
     if (List.mem(state.visualState.drawBigSnakeFruitSegment, state.snake.segments)) {
       drawSegment(~color={...fruitColor, a: 0.7}, ~pos=state.visualState.drawBigSnakeFruitSegment, env);
     };
+  }
 
+  let drawAndUpdate = (state: stateT, env) => {
+    let messages = handleInput(env);
+    let state = update(state, messages, Env.frameCount(env));
+    draw(state, env);
     state;
   };
 };
@@ -361,6 +358,6 @@ let setup = env => {
   {menuState: GameInProgress, playState: SnakeGame.resetGameState()};
 };
 
-let draw = (state: stateT, env) => {...state, playState: SnakeGame.draw(state.playState, env)};
+let draw = (state: stateT, env) => {...state, playState: SnakeGame.drawAndUpdate(state.playState, env)};
 
 run(~setup, ~draw, ());
