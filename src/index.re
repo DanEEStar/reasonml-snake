@@ -6,6 +6,7 @@ let boardSizeY = 20;
 let snakeColor = Utils.color(~r=41, ~g=166, ~b=244, ~a=255);
 let snakeHeadColor = Utils.color(~r=66, ~g=122, ~b=244, ~a=255);
 let fruitColor = Utils.color(~r=255, ~g=80, ~b=41, ~a=255);
+let tickCount = 20;
 
 let messageReduce = (state: 'a, messages: list('b), messageHandler) => {
   let rec loop = (state: 'a, messages: list('b)) => {
@@ -38,6 +39,14 @@ let directionFromNeighbour = (pos1, pos2) =>
     South;
   } else {
     North;
+  };
+
+let offsetFromNeighbour = (pos1, pos2, drawPercentage) =>
+  switch (directionFromNeighbour(pos1, pos2)) {
+  | North => (0.0, float_of_int(segmentSize) *. drawPercentage -. float_of_int(segmentSize))
+  | South => (0.0, float_of_int(- segmentSize) *. drawPercentage +. float_of_int(segmentSize))
+  | East => (float_of_int(segmentSize) *. drawPercentage -. float_of_int(segmentSize), 0.0)
+  | West => (float_of_int(- segmentSize) *. drawPercentage +. float_of_int(segmentSize), 0.0)
   };
 
 let drawSegment =
@@ -115,7 +124,8 @@ module SnakeGame = {
 
   type visualStateT = {
     segmentAnimations: list(SegmentAnimation.t),
-    mutable fruitOffsets: list(int),
+    mutable headOffset: (float, float),
+    mutable fruitOffsets: list(float),
     mutable drawPercentage: float,
     mutable continuousDrawing: bool,
   };
@@ -178,15 +188,21 @@ module SnakeGame = {
     paused: true,
     fruit: {
       x: 10,
-      y: 5,
+      y: 7,
     },
     snake: {
       dir: North,
-      segments: [{x: 10, y: 9}, {x: 10, y: 10}, {x: 10, y: 11}, {x: 10, y: 12}],
+      segments: [
+        {x: 10, y: 9}, {x: 10, y: 10}, {x: 10, y: 11}, {x: 10, y: 12}, 
+        {x: 11, y: 12}, {x: 12, y: 12}, {x: 13, y: 12},
+        {x: 13, y: 11}, {x: 13, y: 10}, {x: 13, y: 9},
+        {x: 12, y: 9}, {x: 11, y: 9}
+      ],
     },
     visualState: {
       segmentAnimations: [],
-      fruitOffsets: [],
+      headOffset: (0.0, 0.0),
+      fruitOffsets: [0.0],
       drawPercentage: 0.0,
       continuousDrawing: true,
     },
@@ -220,7 +236,7 @@ module SnakeGame = {
     visualState: {
       ...state.visualState,
       segmentAnimations: [SegmentAnimation.make(pos, fruitColor, 60.0), ...state.visualState.segmentAnimations],
-      fruitOffsets: [0],
+      fruitOffsets: [0.0],
     },
   };
 
@@ -260,12 +276,12 @@ module SnakeGame = {
     let visualState = {
       ...state.visualState,
       segmentAnimations: SegmentAnimation.updateAll(state.visualState.segmentAnimations),
-      fruitOffsets: List.map(o => o + 1, state.visualState.fruitOffsets),
+      fruitOffsets: List.map(o => o +. 2.0, state.visualState.fruitOffsets),
       drawPercentage:
         if (state.paused) {
           state.visualState.drawPercentage;
         } else {
-          state.visualState.drawPercentage +. 0.1;
+          state.visualState.drawPercentage +. 1.0 /. float_of_int(tickCount);
         },
     };
 
@@ -290,25 +306,8 @@ module SnakeGame = {
             );
           } else if (List.length(state.snake.segments) == index + 1) {
             /* first segment */
-            let (xOffset, yOffset) =
-              switch (directionFromNeighbour(pos, previousSegment^)) {
-              | North => (
-                  0.0,
-                  float_of_int(segmentSize) *. state.visualState.drawPercentage -. float_of_int(segmentSize),
-                )
-              | South => (
-                  0.0,
-                  float_of_int(- segmentSize) *. state.visualState.drawPercentage +. float_of_int(segmentSize),
-                )
-              | East => (
-                  float_of_int(segmentSize) *. state.visualState.drawPercentage -. float_of_int(segmentSize),
-                  0.0,
-                )
-              | West => (
-                  float_of_int(- segmentSize) *. state.visualState.drawPercentage +. float_of_int(segmentSize),
-                  0.0,
-                )
-              };
+            let (xOffset, yOffset) = offsetFromNeighbour(pos, previousSegment^, state.visualState.drawPercentage);
+            state.visualState.headOffset = (xOffset, yOffset);
             drawSegment(~color=snakeHeadColor, ~pos, ~xOffset, ~yOffset, env);
           } else {
             drawSegment(~color=snakeColor, ~pos, env);
@@ -326,7 +325,7 @@ module SnakeGame = {
 
   let update = (state: stateT, inputMessages, frameCount) => {
     let messages =
-      if (frameCount mod 10 == 0 && !state.paused) {
+      if (frameCount mod tickCount == 0 && !state.paused) {
         [TickGameState, ...inputMessages];
       } else {
         inputMessages;
@@ -348,12 +347,38 @@ module SnakeGame = {
 
     if (List.length(state.visualState.fruitOffsets) > 0) {
       let offset = List.hd(state.visualState.fruitOffsets);
-      let drawFruitPosIndex = offset / segmentSize;
-      let yOffset = float_of_int(offset mod segmentSize);
+      let drawFruitPosIndex = int_of_float((offset) /. float_of_int(segmentSize));
 
-      if (drawFruitPosIndex < List.length(state.snake.segments)) {
+      if (drawFruitPosIndex < List.length(state.snake.segments) - 1) {
         let pos = List.nth(state.snake.segments, drawFruitPosIndex);
-        drawSegment(~color={...fruitColor, a: 0.7}, ~pos, ~yOffset, env);
+        let posBefore = List.nth(state.snake.segments, drawFruitPosIndex + 1)
+        print_int(pos.x);
+        print_string(", ")
+        print_int(pos.y);
+        print_string(" -> ")
+        print_int(posBefore.x);
+        print_string(", ")
+        print_int(posBefore.y);
+        let (xOffsetHead, yOffsetHead) = offsetFromNeighbour(pos, posBefore, state.visualState.drawPercentage);
+        /*let (xOffsetHead, yOffsetHead) = (0.0, 0.0);*/
+        print_string(" -> ")
+        print_float(xOffsetHead);
+        print_string(", ")
+        print_float(yOffsetHead);
+        print_endline("");
+        if(pos.y < posBefore.y) {
+          let yOffset = -.mod_float(offset, float_of_int(segmentSize)) +. yOffsetHead;
+          drawSegment(~color={...fruitColor, a: 0.7}, ~pos, ~yOffset, env);
+        } else if(pos.y > posBefore.y) {
+          let yOffset = +.mod_float(offset, float_of_int(segmentSize)) +. yOffsetHead;
+          drawSegment(~color={...fruitColor, a: 0.7}, ~pos, ~yOffset, env);
+        } else if(pos.x < posBefore.x) {
+          let xOffset = -.mod_float(offset, float_of_int(segmentSize)) +. xOffsetHead;
+          drawSegment(~color={...fruitColor, a: 0.7}, ~pos, ~xOffset, env);
+        } else if(pos.x > posBefore.x) {
+          let xOffset = +.mod_float(offset, float_of_int(segmentSize)) +. xOffsetHead;
+          drawSegment(~color={...fruitColor, a: 0.7}, ~pos, ~xOffset, env);
+        }
       } else {
         ();
       }
@@ -381,7 +406,9 @@ type stateT = {
 };
 
 type msgT =
-  | StartGame;
+  | StartGame
+  | Reset
+  | FruitOffset;
 
 let setup = env => {
   Env.size(~width=400, ~height=400, env);
@@ -389,13 +416,19 @@ let setup = env => {
 };
 
 let drawAndUpdateMenu = (state, env) => {
-  let inputMap = [(Reprocessing_Events.C, StartGame)];
+  let inputMap = [
+    (Reprocessing_Events.C, StartGame),
+    (Reprocessing_Events.R, Reset),
+    (Reprocessing_Events.Space, FruitOffset)
+  ];
 
   let handleInput = env => List.filter(input => Env.keyPressed(fst(input), env), inputMap) |> List.map(snd);
 
   let messageHandler = ((state, _), message) =>
     switch (message) {
+    | Reset => ({menuState: StartMenu, playState: SnakeGame.resetGameState()}, [])
     | StartGame => ({...state, menuState: GameInProgress, playState: SnakeGame.resetGameState()}, [])
+    | FruitOffset => ({...state, playState: {...state.playState, visualState: {...state.playState.visualState, fruitOffsets: List.map((f) => f +. 4.0, state.playState.visualState.fruitOffsets)}}}, [])
     };
 
   let state = messageReduce(state, handleInput(env), messageHandler);
