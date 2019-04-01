@@ -6,7 +6,8 @@ let boardSizeY = 20;
 let snakeColor = Utils.color(~r=41, ~g=166, ~b=244, ~a=255);
 let snakeHeadColor = Utils.color(~r=66, ~g=122, ~b=244, ~a=255);
 let fruitColor = Utils.color(~r=255, ~g=80, ~b=41, ~a=255);
-let tickCount = 20;
+let tickCount = 10;
+let fruitDigestSpeed = 5.0;
 
 let messageReduce = (state: 'a, messages: list('b), messageHandler) => {
   let rec loop = (state: 'a, messages: list('b)) => {
@@ -188,15 +189,17 @@ module SnakeGame = {
     paused: true,
     fruit: {
       x: 10,
-      y: 7,
+      y: 8,
     },
     snake: {
       dir: North,
       segments: [
-        {x: 10, y: 9}, {x: 10, y: 10}, {x: 10, y: 11}, {x: 10, y: 12}, 
-        {x: 11, y: 12}, {x: 12, y: 12}, {x: 13, y: 12},
-        {x: 13, y: 11}, {x: 13, y: 10}, {x: 13, y: 9},
-        {x: 12, y: 9}, {x: 11, y: 9}
+        {x: 10, y: 9}, {x: 10, y: 10}, {x: 10, y: 11}, {x: 10, y: 12},
+        {x: 11, y: 12}, {x: 11, y: 11}, {x: 11, y: 10},
+        {x: 12, y: 10}, {x:12, y: 11}, {x: 12, y: 12},
+        {x: 13, y: 12}, {x:13, y: 11}, {x: 13, y: 10},
+        {x: 14, y: 10}, {x:14, y: 11}, {x: 14, y: 12},
+        {x: 15, y: 12}, {x:15, y: 11}, {x: 15, y: 10},
       ],
     },
     visualState: {
@@ -276,7 +279,7 @@ module SnakeGame = {
     let visualState = {
       ...state.visualState,
       segmentAnimations: SegmentAnimation.updateAll(state.visualState.segmentAnimations),
-      fruitOffsets: List.map(o => o +. 2.0, state.visualState.fruitOffsets),
+      fruitOffsets: List.map(o => o +. fruitDigestSpeed, state.visualState.fruitOffsets),
       drawPercentage:
         if (state.paused) {
           state.visualState.drawPercentage;
@@ -349,9 +352,16 @@ module SnakeGame = {
       let offset = List.hd(state.visualState.fruitOffsets);
       let drawFruitPosIndex = int_of_float((offset) /. float_of_int(segmentSize));
 
-      if (drawFruitPosIndex < List.length(state.snake.segments) - 1) {
+      if (drawFruitPosIndex < List.length(state.snake.segments) - 2) {
         let pos = List.nth(state.snake.segments, drawFruitPosIndex);
         let posBefore = List.nth(state.snake.segments, drawFruitPosIndex + 1)
+        let drawFruitPosIndex2 = int_of_float((offset +. 1.0 +. (1.0 -. state.visualState.drawPercentage) *. float_of_int(segmentSize)) /. float_of_int(segmentSize));
+        let (xOffsetHead, yOffsetHead) = offsetFromNeighbour(pos, posBefore, state.visualState.drawPercentage);
+        /*let (xOffsetHead, yOffsetHead) = offsetFromNeighbour(pos, posBefore, 1.0);*/
+        let pos1 = List.nth(state.snake.segments, drawFruitPosIndex2);
+        let pos2 = List.nth(state.snake.segments, drawFruitPosIndex2 + 1)
+
+        /*
         print_int(pos.x);
         print_string(", ")
         print_int(pos.y);
@@ -359,25 +369,68 @@ module SnakeGame = {
         print_int(posBefore.x);
         print_string(", ")
         print_int(posBefore.y);
-        let (xOffsetHead, yOffsetHead) = offsetFromNeighbour(pos, posBefore, state.visualState.drawPercentage);
-        /*let (xOffsetHead, yOffsetHead) = (0.0, 0.0);*/
+        print_string(" -> ")
+        print_int(pos1.x);
+        print_string(", ")
+        print_int(pos1.y);
+        print_string(" -> ")
+        print_int(pos2.x);
+        print_string(", ")
+        print_int(pos2.y);
+        print_string(" -> ")
+        print_int(drawFruitPosIndex);
         print_string(" -> ")
         print_float(xOffsetHead);
         print_string(", ")
         print_float(yOffsetHead);
+        print_string(" -- ")
+        print_float(offset);
         print_endline("");
+        */
+
+        let blockOffset = float_of_int(drawFruitPosIndex) *. float_of_int(segmentSize);
+        let percentageSegmentOffset = state.visualState.drawPercentage *. float_of_int(segmentSize);
+        let drawOffset = offset -. blockOffset -. percentageSegmentOffset;
+
+        print_float(drawOffset);
+        print_endline("");
+
         if(pos.y < posBefore.y) {
-          let yOffset = -.mod_float(offset, float_of_int(segmentSize)) +. yOffsetHead;
-          drawSegment(~color={...fruitColor, a: 0.7}, ~pos, ~yOffset, env);
+          if(pos1.y < pos2.y) {
+            let yOffset = -.mod_float(offset, float_of_int(segmentSize)) +. yOffsetHead;
+            drawSegment(~color={...fruitColor, a: 0.7}, ~pos, ~yOffset, env);
+          } else if (pos1.x > pos2.x) {
+            drawSegment(~color={...fruitColor, a: 0.7}, ~pos=pos1, ~xOffset=drawOffset, env);
+          } else {
+            drawSegment(~color={...fruitColor, a: 0.7}, ~pos=pos1, ~xOffset=-.drawOffset, env);
+          }
         } else if(pos.y > posBefore.y) {
-          let yOffset = +.mod_float(offset, float_of_int(segmentSize)) +. yOffsetHead;
-          drawSegment(~color={...fruitColor, a: 0.7}, ~pos, ~yOffset, env);
+          if(pos1.y > pos2.y) {
+            let yOffset = +.mod_float(offset, float_of_int(segmentSize)) +. yOffsetHead;
+            drawSegment(~color={...fruitColor, a: 0.7}, ~pos, ~yOffset, env);
+          } else if (pos1.x > pos2.x) {
+            drawSegment(~color={...fruitColor, a: 0.7}, ~pos=pos1, ~xOffset=drawOffset, env);
+          } else {
+            drawSegment(~color={...fruitColor, a: 0.7}, ~pos=pos1, ~xOffset=-.drawOffset, env);
+          }
         } else if(pos.x < posBefore.x) {
-          let xOffset = -.mod_float(offset, float_of_int(segmentSize)) +. xOffsetHead;
-          drawSegment(~color={...fruitColor, a: 0.7}, ~pos, ~xOffset, env);
+          if(pos1.x < pos2.x) {
+            let xOffset = -.mod_float(offset, float_of_int(segmentSize)) +. xOffsetHead;
+            drawSegment(~color={...fruitColor, a: 0.7}, ~pos, ~xOffset, env);
+          } else if (pos1.y > pos2.y ) {
+            drawSegment(~color={...fruitColor, a: 0.7}, ~pos=pos1, ~yOffset=drawOffset, env);
+          } else {
+            drawSegment(~color={...fruitColor, a: 0.7}, ~pos=pos1, ~yOffset=-.drawOffset, env);
+          }
         } else if(pos.x > posBefore.x) {
-          let xOffset = +.mod_float(offset, float_of_int(segmentSize)) +. xOffsetHead;
-          drawSegment(~color={...fruitColor, a: 0.7}, ~pos, ~xOffset, env);
+          if(pos1.x > pos2.x) {
+            let xOffset = +.mod_float(offset, float_of_int(segmentSize)) +. xOffsetHead;
+            drawSegment(~color={...fruitColor, a: 0.7}, ~pos=pos, ~xOffset, env);
+          } else if (pos1.y > pos2.y ) {
+            drawSegment(~color={...fruitColor, a: 0.7}, ~pos=pos1, ~yOffset=drawOffset, env);
+          } else {
+            drawSegment(~color={...fruitColor, a: 0.7}, ~pos=pos1, ~yOffset=-.drawOffset, env);
+          }
         }
       } else {
         ();
@@ -453,4 +506,4 @@ let draw = (state: stateT, env) =>
   | GameOver => drawAndUpdateMenu(state, env)
   };
 
-run(~setup, ~draw, ());
+ run(~setup, ~draw, ());
