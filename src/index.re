@@ -186,26 +186,21 @@ module SnakeGame = {
   };
 
   let resetGameState = () => {
-    paused: true,
+    paused: false,
     fruit: {
       x: 10,
-      y: 8,
+      y: 5,
     },
     snake: {
       dir: North,
       segments: [
-        {x: 10, y: 9}, {x: 10, y: 10}, {x: 10, y: 11}, {x: 10, y: 12},
-        {x: 11, y: 12}, {x: 11, y: 11}, {x: 11, y: 10},
-        {x: 12, y: 10}, {x:12, y: 11}, {x: 12, y: 12},
-        {x: 13, y: 12}, {x:13, y: 11}, {x: 13, y: 10},
-        {x: 14, y: 10}, {x:14, y: 11}, {x: 14, y: 12},
-        {x: 15, y: 12}, {x:15, y: 11}, {x: 15, y: 10},
-      ],
+        {x: 10, y: 9}, {x: 10, y: 10}, {x: 10, y: 11}, {x: 10, y: 12}
+      ]
     },
     visualState: {
       segmentAnimations: [],
       headOffset: (0.0, 0.0),
-      fruitOffsets: [0.0],
+      fruitOffsets: [],
       drawPercentage: 0.0,
       continuousDrawing: true,
     },
@@ -465,7 +460,7 @@ type msgT =
 
 let setup = env => {
   Env.size(~width=400, ~height=400, env);
-  {menuState: StartMenu, playState: SnakeGame.resetGameState()};
+  {menuState: GameInProgress, playState: SnakeGame.resetGameState()};
 };
 
 let drawAndUpdateMenu = (state, env) => {
